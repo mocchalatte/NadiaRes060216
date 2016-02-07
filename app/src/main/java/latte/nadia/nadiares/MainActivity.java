@@ -1,10 +1,14 @@
 package latte.nadia.nadiares;
 
+import android.content.Intent;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.Toast;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -20,8 +24,10 @@ import java.io.InputStreamReader;
 
 public class MainActivity extends AppCompatActivity {
 
-    //ประกาศ
+    //Explicit
     private MyManage objMyManage;
+    private EditText userEditText,passwordEditText;
+    private String userString,passwordString;
 
 
     @Override
@@ -29,151 +35,189 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        //BindWidget ผูกตัวแปร
+        userEditText = (EditText) findViewById(R.id.editText);
+        passwordEditText = (EditText) findViewById(R.id.editText2);
+
 
         //Request Database
         objMyManage = new MyManage(this);
 
-        //Test add Value
+        //Test Add Value
         //testAddValue();
 
-        //CleanData
-        cleanData();//ตัวแปร
+        //Clean data
+        cleanData();
 
-        //Sync JSON to SQLite
+        //Synchronize JSON to SQLite
         synJSONtoSQLite();
 
-    }//Main Method
+
+    }// Main Method
+
+    public void clickLogin(View view) {
+
+
+        //Check Space
+        userString = userEditText.getText().toString().trim();// trim ทำการตัดช่องว่างโดยอัตโนมัติ
+        passwordString = passwordEditText.getText().toString().trim();
+
+        // || = or
+        if (userString.equals("") || passwordString.equals("")) {
+
+            //Have Space
+            Toast.makeText(MainActivity.this, "กรุณากรอกข้อมูลให้ครบค่ะ", Toast.LENGTH_SHORT).show();
+        } else {
+
+            //No Space
+            checkAuthen();
+
+        }//else
+
+    } // clickLogin
+
+    private void checkAuthen() {
+
+        try {
+
+            String[] resultStrings = objMyManage.searchUser(userString);
+            if (passwordString.equals(resultStrings[2])) {
+                //Intent To Service
+                Intent objIntent = new Intent(MainActivity.this,ServiceActivity.class);
+                objIntent.putExtra("Name", resultStrings[3]);
+                startActivity(objIntent);
+                finish();
+
+            } else {
+                Toast.makeText(MainActivity.this, "Password ผิด",
+                        Toast.LENGTH_SHORT).show();
+            }
+
+
+        } catch (Exception e) {
+            Toast.makeText(MainActivity.this, "ไม่มี" + userString + "ในฐานข้อมูลของเรา",
+                    Toast.LENGTH_SHORT).show();
+        }
+
+    } // checkAuthen
 
     private void synJSONtoSQLite() {
 
-
         //Change Policy
         StrictMode.ThreadPolicy myPolicy = new StrictMode.ThreadPolicy
-                .Builder().permitAll().build();
+                .Builder().permitAll().build();//permitAll = อนุญาตให้ทำทุกๆอย่าง
         StrictMode.setThreadPolicy(myPolicy);
 
         int intTable = 1;
-        String tag = "Restuarant";
+        String tag = "Restaurant";
 
-        while (intTable <= 2){
+        while (intTable <=2) {
 
-            //1. Create InputStream คือ ไหมพรหมมีแค่ 1 เส้น โหลดไปประมวลผลไป
+            //1. Create InputStream
             InputStream objInputStream = null;
             String strURLuser = "http://swiftcodingthai.com/6feb/php_get_nadia.php";
             String strURLfood = "http://swiftcodingthai.com/6feb/php_get_data_food.php";
+            HttpPost objHttpPost = null;
 
-                HttpPost objHttpPost = null;
-                try {
-                    HttpClient objHttpClient = new DefaultHttpClient();//ขีดกลาง คือ มองว่าไม่ปลอดภัย
-                    switch (intTable) {
-                        case 1:
-                            objHttpPost = new HttpPost(strURLuser);
-                            break;
-                        case 2:
-                            objHttpPost = new HttpPost(strURLfood);
-                            break;
-                        default:
-                            break;
-                    } // switch
-                    HttpResponse objHttpResponse = objHttpClient.execute(objHttpPost);
-                    HttpEntity objHttpEntity = objHttpResponse.getEntity();
-                    objInputStream = objHttpEntity.getContent();
+            //ป้องกันการ error สำหรับตัวที่เสี่ยงต่อการ error ที่ยอมรับได้
+            try {
+                HttpClient objHttpClient = new DefaultHttpClient();//ขีดกลาง คือ google มองว่าเสี่ยงต่อความไม่ปอดภัย
+                switch (intTable) {
+                    case 1:
+                        objHttpPost = new HttpPost(strURLuser);
+                        break;
+                    case 2:
+                        objHttpPost = new HttpPost(strURLfood);
+                        break;
+                    default:
+                        break;
+                } // switch
 
-            }catch (Exception e){
-                Log.d(tag,"InputStream ==>"+e.toString());
+                HttpResponse objHttpResponse = objHttpClient.execute(objHttpPost);
+                HttpEntity objHttpEntity = objHttpResponse.getEntity();
+                objInputStream = objHttpEntity.getContent();
+
+            } catch (Exception e) {
+                Log.d(tag, "InputStream ==> " +e.toString());
             }
 
+            //2. Create JSON String เปลี่ยนสิ่งที่ประมวลผลได้เป็น String
+            String strJSON = null; //ค่าเริ่มต้น
 
-            //2. Create JSON String สิ่งที่โหลดมา เปลี่ยนเป็น String
-            String strJSON = null;
-            try{
-
-
-                BufferedReader objBufferedReader = new BufferedReader(new InputStreamReader(objInputStream,"UTF-8"));//แปลงให้เป็นภาษาไทย
+            try {
+                // BufferedReader เป็นตัวบอกว่าให้ดึง String ได้ยาวแค่ไหน
+                BufferedReader objBufferedReader = new BufferedReader(new InputStreamReader(objInputStream, "UTF-8"));//ภาษาไทยต้องมีการ UTF-8 มิเช่นนั้นจะเป็นภาษาต่างดาว
+                //StringBuilder เป็นตัวผูกให้ String รวมกัน
                 StringBuilder objStringBuilder = new StringBuilder();
                 String strLine = null;
 
-                while ((strLine = objBufferedReader.readLine()) != null){
+                while ((strLine = objBufferedReader.readLine()) !=null) {
                     objStringBuilder.append(strLine);
-
-                }//while //StringBuilder เป็นตัวประกอบ String ที่มาสเตอร์ตัดเป็นท่อนๆ
+                }// while
 
                 objInputStream.close();
-                strJSON = objStringBuilder.toString();//strJSON ยาวมาก แค่บรรทัดเดียว
+                strJSON = objStringBuilder.toString();
 
-
-
-            }catch (Exception e){
-                Log.d(tag,"strJSON ==>" + e.toString());
+            } catch (Exception e) {
+                Log.d(tag, "strJSON ==> " +e.toString());
             }
 
-            //3. Update SQLite ขึ้น Lite
-            try{
-
+            //3. Update SQLite
+            try {
+                // Class นึงที่ google สร้างไว้ให้ใช้
                 JSONArray objJsonArray = new JSONArray(strJSON);
-                for(int i=0;i<objJsonArray.length();i++){
+                for (int i = 0; i < objJsonArray.length(); i++) {
 
                     JSONObject jsonObject = objJsonArray.getJSONObject(i);
-                    switch (intTable){
+
+                    switch (intTable) {
                         case 1:
 
-                            //GetValue From userTABLE
-                            String strUser = jsonObject.getString(MyManage.column_user);//,มันวิ่งไป user
-                            String strPassward = jsonObject.getString(MyManage.column_pass);
+                            //Get Value From userTABLE
+                            String strUser = jsonObject.getString(MyManage.column_user);
+                            String strPassword = jsonObject.getString(MyManage.column_pass);
                             String strName = jsonObject.getString(MyManage.column_name);
 
-                            objMyManage.addNewValue(0,strUser,strPassward,strPassward);
-
+                            objMyManage.addNewValue(0, strUser, strPassword, strName);
 
                             break;
                         case 2:
 
-                            //GetValue From foodTABLE
+                            //Get Value From foodTABLE
                             String strFood = jsonObject.getString(MyManage.column_food);
                             String strPrice = jsonObject.getString(MyManage.column_price);
                             String strSource = jsonObject.getString(MyManage.column_source);
 
-                            objMyManage.addNewValue(1,strFood,strPrice,strSource);
-
-
+                            objMyManage.addNewValue(1, strFood, strPrice, strSource);
 
                             break;
-                    }
+                    }// switch
 
-                }// for
+                } // for
 
-
-
-            }catch (Exception e){
-                Log.d(tag,"Update ==>"+ e.toString());
+            } catch (Exception e) {
+                Log.d(tag, "Update ==> " +e.toString());
             }
 
-            intTable +=1;
-
-
-        }// while
-
+            intTable +=1;//จะทำการเพิ่มค่า แล้วเอาไปเช็ค ที่ while ว่า intTable <=2 รึป่าว
+        } // while
 
     }// synJSONtoSQLite
 
     private void cleanData() {
 
-        SQLiteDatabase objSQLiteDatabase = openOrCreateDatabase(MyOpenHelper.database_name,
-                MODE_PRIVATE, null);
-        objSQLiteDatabase.delete(MyManage.food_TABLE, null, null);
-        objSQLiteDatabase.delete(MyManage.user_TABLE, null, null);
+        SQLiteDatabase objSqLiteDatabase = openOrCreateDatabase(MyOpenHelper.database_name,
+                MODE_PRIVATE, null);// MODE_PRIVATE อนุญาตให้ลบข้อมูลในฐานข้อมูลแต่ไม่ให้ลบตาราง
+        objSqLiteDatabase.delete(MyManage.food_TABLE, null, null);
+        objSqLiteDatabase.delete(MyManage.user_TABLE, null, null);
 
-    }// CleanData
+    }// cleanData
 
     private void testAddValue() {
 
-        for ( int i=0;i<=1;i++){
-            objMyManage.addNewValue(i,"test1","test2","test3");
+        for (int i=0;i<=1;i++){
+            objMyManage.addNewValue(i, "test1", "test2", "test3");
         }// for
 
-    }// testaddvalue
-
-
-}// Main Class
-
-
+    }// testAddValue
+}// Main Class                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
